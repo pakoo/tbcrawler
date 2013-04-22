@@ -15,7 +15,7 @@ import os
 import traceback
 import datetime
 import gridfs
-import simplejson as json
+import  json
 import types
 from smallgfw import GFW
 import os 
@@ -122,11 +122,15 @@ def searchcrawler(url):
             print item_id
 
 
-def itemcrawler(iid):
+def itemcrawler(iid,source='tb'):
     """
     淘宝物品页爬虫
     """
-    url="http://item.taobao.com/item.htm?&id=%s"%iid
+    if source == 'tb':
+        url="http://item.taobao.com/item.htm?id=%s"%iid
+    else:
+        url="http://detail.tmall.com/item.htm?id=%s"%iid
+        
     html=get_html(url)
     #print html
     if html:
@@ -140,10 +144,11 @@ def parse_price(iid,price):
     """
     提取价格数据
     """
-    data =  get_html('http://ajax.tbcdn.cn/json/umpStock.htm?itemId=%s&p=1&rcid=1&price=%s&sellerId=6'%(iid,price),'http://item.taobao.com/item.htm?id=%s'%iid)
+    data =  get_html('http://ajax.tbcdn.cn/json/umpStock.htm?itemId=%s&p=1&rcid=1&price=%s&sellerId=6'%(iid,price),referer='http://item.taobao.com/item.htm?id=%s'%iid)
     intkey = ['price','quanity','interval']
     resdict = {}
     data = data.decode('gbk').strip().replace('\r\n','').replace('\t','')
+    print 'data:',data
     patt = '.+?(\w+:\s*".*")'
     res = re.match(patt,data)
     if res:
@@ -190,9 +195,31 @@ def parse_quantity(iid):
                     resdict[key]= value
     return resdict
 
-def get_item_info(iid,source='tb'):
+def getTmallItemInfo(iid):
     """
-    获取物品页信息
+    获取天猫的物品信息
+    """
+    temp = {}
+    url = "http://mdskip.taobao.com/core/initItemDetail.htm?tmallBuySupport=true&itemId=%s&service3C=true"%(iid)
+    data = get_html(url,referer="http://detail.tmall.com/item.htm?id=%s"%iid).decode('gbk').replace('\r\n','').replace('\t','')
+    patt = '"priceInfo":(\{.*\}),"promType"'
+    price_info = re.findall(patt,data)
+    if price_info:
+        price_info = json.loads(price_info[0])
+        temp['item_original_cost'] = float(price_info['def']['price'])
+        temp['real_price'] = float(price_info['def']['promotionList'][0]['price'])
+
+    patt = '"sellCountDO":(\{.*\}),"serviceDO"'
+    quantity_info = re.findall(patt,data)
+    if quantity_info:
+        quantity_info = json.loads(quantity_info[0])
+        temp['quantity'] = float(quantity_info['sellCount'])
+    return temp
+
+
+def getTaobaoItemInfo(iid):
+    """
+    获取淘宝物品页信息
     """
     item_original_cost = itemcrawler(iid)
     price_info = parse_price(iid,int(item_original_cost*100))
@@ -206,15 +233,22 @@ def get_item_info(iid,source='tb'):
 if __name__ == "__main__":
     pass
     #print '*******************************************'
-    #url = "http://s.taobao.com/search?q=无线路由器&commend=all"
+    url = "http://mdskip.taobao.com/core/initItemDetail.htm?tmallBuySupport=true&itemId=15765842063&service3C=true"
+    data = get_html(url,referer="http://detail.tmall.com/item.htm?id=15765842063").decode('gbk').replace('\r\n','').replace('\t','')
+    #patt = '.+?(\w+:\s*".*")'
+
+
     #searchcrawler(url)
     #print '*******************************************'
-    #itemcrawler(15517664123)
+    #itemcrawler(15765842063,'tm')
     #print res.decode('gbk')
     #print parse_price(15517664123,28900)
     #print '+++++++++++++++++++++++++++++++++++++++++++++++++++++++='
     #print parse_quantity(15517664123)
-    get_item_info(13806634536)
+    #get_item_info(19483191116)
+    #res = res.decode('gbk').strip().replace('\r\n','').replace('\t','')
+    #res = json.loads(res[19:-1])
+    #print res['comments']
 
 
 
