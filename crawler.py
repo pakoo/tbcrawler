@@ -14,7 +14,6 @@ from django.utils.encoding import smart_str, smart_unicode
 import os 
 import traceback
 import datetime
-import gridfs
 import  json
 import types
 from smallgfw import GFW
@@ -30,14 +29,7 @@ mktime=lambda dt:time.mktime(dt.utctimetuple())
 ######################db.init######################
 #connection = pymongo.Connection('localhost', 27017)
 #
-#kds=connection.kds
 #post=kds.post
-#kdsuser=kds.user
-##fs=gridfs.GridFS(kds,'postfile')
-#
-#tieba = connection.tieba
-#tieba_post = tieba.post
-#tieba_user = tieba.user
 #
 #browser = requests.session()
 ######################gfw.init######################
@@ -56,6 +48,7 @@ def get_html(url,referer ='',verbose=False):
     print '============================================'
     time.sleep(1)
     html=''
+    headers = ['Cache-control: max-age=0',]
     try:
         crl = pycurl.Curl()
         crl.setopt(pycurl.VERBOSE,1)
@@ -66,6 +59,7 @@ def get_html(url,referer ='',verbose=False):
         crl.setopt(pycurl.VERBOSE, verbose)
         crl.setopt(pycurl.MAXREDIRS,10)
         crl.setopt(pycurl.USERAGENT,'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:9.0.1) Gecko/20100101 Firefox/9.0.1')
+        #crl.setopt(pycurl.HTTPHEADER,headers)
         if referer:
             crl.setopt(pycurl.REFERER,referer)
         crl.fp = StringIO.StringIO()
@@ -135,34 +129,32 @@ def itemcrawler(iid,source='tb'):
     #print html
     if html:
         soup = BeautifulSoup(html,fromEncoding='gbk')
+        shop_info = {}
+        for a in soup.find('meta',{'name':'microscope-data'})['content'].split(';'):
+            k,v = a.strip().split('=')
+            shop_info[k] = int(v)
         price = soup.find('li',{'id':'J_StrPriceModBox'}).find('em',{'class':'tb-rmb-num'}).text
         quantity_info = soup.find('li',{'class':'tb-sold-out tb-clearfix'})
-        print 'price:',price
-        return float(price)
+        shop_info['price'] = float(price)
+        print 'shop_info:',shop_info
+        return shop_info
 
-def parse_price(iid,price):
+def parse_price(iid,price,sellerid):
     """
     提取价格数据
     """
-    data =  get_html('http://ajax.tbcdn.cn/json/umpStock.htm?itemId=%s&p=1&rcid=1&price=%s&sellerId=6'%(iid,price),referer='http://item.taobao.com/item.htm?id=%s'%iid)
+    data =  get_html('http://ajax.tbcdn.cn/json/umpStock.htm?itemId=%s&p=1&rcid=1&price=%s&sellerId=%s'%(iid,price,sellerid),referer='http://item.taobao.com/item.htm?id=%s'%iid,verbose=True)
+    #data =  get_html('http://ajax.tbcdn.cn/json/umpStock.htm?itemId=17824234211&p=1&price=6800&sellerId=50894817',referer='http://item.taobao.com/item.htm?id=%s'%iid,verbose=True)
     intkey = ['price','quanity','interval']
     resdict = {}
     data = data.decode('gbk').strip().replace('\r\n','').replace('\t','')
+    patt_list = [r'price:\s*"(\w*\.\w*)"',
+                 r'type:\s*"(.*)",\s*price' ,
+                ]
     print 'data:',data
-    patt = '.+?(\w+:\s*".*")'
-    res = re.match(patt,data)
-    if res:
-        res = res.groups()[0].split(',')
-        for r in res:
-            key,value = r.split(':')
-            key = key.strip() 
-            value=eval(value.strip())
-            #print 'key:',key
-            #print 'value:',value
-            if key in intkey:
-                value = float(value)
-            resdict[key] = value
-    return resdict
+    price = float(re.findall(patt_list[0],data)[0])
+    price_type = str(re.findall(patt_list[1],data)[0]) 
+    return {'price':price,'type':price_type}
 
 def parse_quantity(iid):
     """
@@ -221,10 +213,10 @@ def getTaobaoItemInfo(iid):
     """
     获取淘宝物品页信息
     """
-    item_original_cost = itemcrawler(iid)
-    price_info = parse_price(iid,int(item_original_cost*100))
+    item_original_info = itemcrawler(iid)
+    price_info = parse_price(iid,int(item_original_info['price']*100),item_original_info['userid'])
     quantity_info = parse_quantity(iid)
-    print '物品原价:',item_original_cost
+    print '物品原价:',item_original_info['price']
     if price_info:
         print price_info['type']
         print '物品现价:',price_info['price']
@@ -233,22 +225,24 @@ def getTaobaoItemInfo(iid):
 if __name__ == "__main__":
     pass
     #print '*******************************************'
-    url = "http://mdskip.taobao.com/core/initItemDetail.htm?tmallBuySupport=true&itemId=15765842063&service3C=true"
-    data = get_html(url,referer="http://detail.tmall.com/item.htm?id=15765842063").decode('gbk').replace('\r\n','').replace('\t','')
+    #url = "http://mdskip.taobao.com/core/initItemDetail.htm?tmallBuySupport=true&itemId=15765842063&service3C=true"
+    #data = get_html(url,referer="http://detail.tmall.com/item.htm?id=15765842063").decode('gbk').replace('\r\n','').replace('\t','')
     #patt = '.+?(\w+:\s*".*")'
 
 
     #searchcrawler(url)
     #print '*******************************************'
-    #itemcrawler(15765842063,'tm')
     #print res.decode('gbk')
-    #print parse_price(15517664123,28900)
     #print '+++++++++++++++++++++++++++++++++++++++++++++++++++++++='
     #print parse_quantity(15517664123)
     #get_item_info(19483191116)
     #res = res.decode('gbk').strip().replace('\r\n','').replace('\t','')
     #res = json.loads(res[19:-1])
     #print res['comments']
+    getTaobaoItemInfo(17824234211)
+    #print getTmallItemInfo(14370067783)
+    #print parse_price(17824234211,6800)
+    #print itemcrawler(17824234211)
 
 
 
