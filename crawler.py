@@ -14,7 +14,7 @@ import traceback
 import datetime
 import  json
 import types
-from smallgfw import GFW
+#from smallgfw import GFW
 import os 
 import os.path
 from pymongo import ASCENDING,DESCENDING
