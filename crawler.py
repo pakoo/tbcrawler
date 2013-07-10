@@ -1,7 +1,5 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
-#Author:pako
-#Email:zealzpc@gmail.com
 """
 some db interface 
 """
@@ -83,7 +81,7 @@ def get_html(url,referer ='',verbose=False):
 
 def transtime(stime):
     """
-            将'11-12-13 11:30'类型的时间转换成unixtime
+    将'11-12-13 11:30'类型的时间转换成unixtime
     """
     if stime and ':' in stime:
         res=stime.split(' ')
@@ -97,14 +95,13 @@ def transtime(stime):
 
 def searchcrawler(url):
     """
-    淘宝搜索页爬虫
+    tb搜索页爬虫
     """
     html=get_html(url)
     #print html
     if html:
         soup = BeautifulSoup(html,fromEncoding='gbk')
         items = soup.findAll('div',{'class':'col item icon-datalink'})
-        print 'items len:',len(items)
         print '==================================================='
         #print items[0]
         for item in items:
@@ -118,7 +115,7 @@ def searchcrawler(url):
 
 def itemcrawler(iid,source='tb'):
     """
-    淘宝物品页爬虫
+    tb物品页爬虫
     """
     if source == 'tb':
         url="http://item.taobao.com/item.htm?id=%s"%iid
@@ -130,37 +127,52 @@ def itemcrawler(iid,source='tb'):
     if html:
         soup = BeautifulSoup(html,fromEncoding='gbk')
         shop_info = {}
+        #请求销售数量url中需要的md5
+        quantity_md5_patt = 'sbn=(\w{32})'
+        qmd5 = re.findall(quantity_md5_patt,html)[0]
         for a in soup.find('meta',{'name':'microscope-data'})['content'].split(';'):
             k,v = a.strip().split('=')
-            shop_info[k] = int(v)
+            if k and v:
+                shop_info[k] = int(v)
         price = soup.find('li',{'id':'J_StrPriceModBox'}).find('em',{'class':'tb-rmb-num'}).text
+        #商品名称
+        item_name = json.loads(soup.find('div',{'id':'J_itemViewed'})['data-value'])['title']
+        shop_info['item_name'] = item_name
+        #店铺名称
+        shop_name = soup.find('a',{'class':'hCard fn'})['title']
+        shop_info['shop_name'] = shop_name
         quantity_info = soup.find('li',{'class':'tb-sold-out tb-clearfix'})
         shop_info['price'] = float(price)
-        print 'shop_info:',shop_info
+        shop_info['qmd5'] = qmd5
+        #print 'shop_info:',shop_info
         return shop_info
 
 def parse_price(iid,price,sellerid):
     """
     提取价格数据
     """
-    data =  get_html('http://ajax.tbcdn.cn/json/umpStock.htm?itemId=%s&p=1&rcid=1&price=%s&sellerId=%s'%(iid,price,sellerid),referer='http://item.taobao.com/item.htm?id=%s'%iid,verbose=True)
-    #data =  get_html('http://ajax.tbcdn.cn/json/umpStock.htm?itemId=17824234211&p=1&price=6800&sellerId=50894817',referer='http://item.taobao.com/item.htm?id=%s'%iid,verbose=True)
+    data =  get_html('http://ajax.tbcdn.cn/json/umpStock.htm?itemId=%s&p=1&rcid=1&price=%s&sellerId=%s'%(iid,price,sellerid),referer='http://item.taobao.com/item.htm?id=%s'%iid,verbose=False)
     intkey = ['price','quanity','interval']
     resdict = {}
     data = data.decode('gbk').strip().replace('\r\n','').replace('\t','')
     patt_list = [r'price:\s*"(\w*\.\w*)"',
                  r'type:\s*"(.*)",\s*price' ,
                 ]
-    print 'data:',data
-    price = float(re.findall(patt_list[0],data)[0])
-    price_type = str(re.findall(patt_list[1],data)[0]) 
-    return {'price':price,'type':price_type}
+    #print 'data:',data
+    if len(data) < 50:
+        #无活动,价格就是原价
+        real_price = price/100
+        price_type = '无'
+    else:
+        real_price = float(re.findall(patt_list[0],data)[0])
+        price_type = str(re.findall(patt_list[1],data)[0]) 
+    return {'price':real_price,'type':price_type}
 
-def parse_quantity(iid):
+def parse_quantity(iid,sellerid,qmd5):
     """
     提取货物销量
     """
-    url = "http://ajax.tbcdn.cn/json/ifq.htm?id=%s&sid=1&p=1&ap=0&ss=0&free=0&q=1&ex=0&exs=0&at=b&ct=0"%iid
+    url = "http://ajax.tbcdn.cn/json/ifq.htm?id=%s&sid=%s&p=1&ap=0&ss=0&free=0&q=1&ex=0&exs=0&at=b&ct=0&sbn=%s"%(iid,sellerid,qmd5)
     data = get_html(url)
     intkey = ['quanity','interval']
     resdict = {}
@@ -189,7 +201,7 @@ def parse_quantity(iid):
 
 def getTmallItemInfo(iid):
     """
-    获取天猫的物品信息
+    获取tm的物品信息
     """
     temp = {}
     url = "http://mdskip.taobao.com/core/initItemDetail.htm?tmallBuySupport=true&itemId=%s&service3C=true"%(iid)
@@ -211,14 +223,16 @@ def getTmallItemInfo(iid):
 
 def getTaobaoItemInfo(iid):
     """
-    获取淘宝物品页信息
+    获取tb物品页信息
     """
     item_original_info = itemcrawler(iid)
     price_info = parse_price(iid,int(item_original_info['price']*100),item_original_info['userid'])
-    quantity_info = parse_quantity(iid)
+    quantity_info = parse_quantity(iid,item_original_info['userid'],item_original_info['qmd5'])
+    print '店名:',item_original_info['shop_name']
+    print '物品名称:',item_original_info['item_name']
     print '物品原价:',item_original_info['price']
     if price_info:
-        print price_info['type']
+        print '活动:',price_info['type']
         print '物品现价:',price_info['price']
     print '物品%s天内售出了%s件:'%(quantity_info['interval'],quantity_info['quanity'])
 
@@ -229,17 +243,14 @@ if __name__ == "__main__":
     #data = get_html(url,referer="http://detail.tmall.com/item.htm?id=15765842063").decode('gbk').replace('\r\n','').replace('\t','')
     #patt = '.+?(\w+:\s*".*")'
 
-
+    #url = "http://s.taobao.com/search?q=%C2%B7%D3%C9%C6%F7&commend=all&search_type=item&sourceId=tb.index&spm=1.1000386.5803581.d4908513&initiative_id=tbindexz_20130710"
     #searchcrawler(url)
     #print '*******************************************'
     #print res.decode('gbk')
     #print '+++++++++++++++++++++++++++++++++++++++++++++++++++++++='
     #print parse_quantity(15517664123)
-    #get_item_info(19483191116)
-    #res = res.decode('gbk').strip().replace('\r\n','').replace('\t','')
-    #res = json.loads(res[19:-1])
     #print res['comments']
-    getTaobaoItemInfo(17824234211)
+    getTaobaoItemInfo(18592215983)
     #print getTmallItemInfo(14370067783)
     #print parse_price(17824234211,6800)
     #print itemcrawler(17824234211)
