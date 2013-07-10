@@ -31,11 +31,11 @@ mktime=lambda dt:time.mktime(dt.utctimetuple())
 #
 #browser = requests.session()
 ######################gfw.init######################
-gfw = GFW()
-gfw.set(open(os.path.join(os.path.dirname(__file__),'keyword.txt')).read().split('\n'))
-
-lgfw = GFW()
-lgfw.set(['thunder://','magnet:','ed2k://'])
+#gfw = GFW()
+#gfw.set(open(os.path.join(os.path.dirname(__file__),'keyword.txt')).read().split('\n'))
+#
+#lgfw = GFW()
+#lgfw.set(['thunder://','magnet:','ed2k://'])
 
 
 
@@ -101,16 +101,30 @@ def searchcrawler(url):
     #print html
     if html:
         soup = BeautifulSoup(html,fromEncoding='gbk')
-        items = soup.findAll('div',{'class':'col item icon-datalink'})
-        print '==================================================='
-        #print items[0]
-        for item in items:
-            item_info = item.find('div',{'class':'item-box'}).h3.a
-            item_url = item_info['href']
-            url_info = urlparse.urlparse(item_url)
-            item_id = urlparse.parse_qs(url_info.query,True)['id'][0]
-            print item_url
-            print item_id
+        items_row = soup.findAll('div',{'class':'row item icon-datalink'})
+        if items_row:
+            print '=======================row search row=========================='
+            #print items
+            for item in items_row:
+                item_info = item.find('div',{'class':'col title'}).h3.a
+                item_url = item_info['href']
+                url_info = urlparse.urlparse(item_url)
+                item_id = urlparse.parse_qs(url_info.query,True)['id'][0]
+                print item_url
+                print item_id
+                judge_site(item_url)
+        items_col = soup.findAll('div',{'class':'col item icon-datalink'})
+        if items_col:
+            print '=======================row search col=========================='
+            #print items
+            for item in items_col:
+                item_info = item.find('div',{'class':'item-box'}).h3.a
+                item_url = item_info['href']
+                url_info = urlparse.urlparse(item_url)
+                item_id = urlparse.parse_qs(url_info.query,True)['id'][0]
+                print item_url
+                print item_id
+                judge_site(item_url)
 
 
 def itemcrawler(iid,source='tb'):
@@ -142,7 +156,11 @@ def itemcrawler(iid,source='tb'):
         shop_name = soup.find('a',{'class':'hCard fn'})['title']
         shop_info['shop_name'] = shop_name
         quantity_info = soup.find('li',{'class':'tb-sold-out tb-clearfix'})
-        shop_info['price'] = float(price)
+        #有可能是个价格范围,先取最小值
+        if '-' in price:
+            shop_info['price'] = float(price.split('-')[0].strip())
+        else:
+            shop_info['price'] = float(price)
         shop_info['qmd5'] = qmd5
         #print 'shop_info:',shop_info
         return shop_info
@@ -209,10 +227,15 @@ def getTmallItemInfo(iid):
     patt = '"priceInfo":(\{.*\}),"promType"'
     price_info = re.findall(patt,data)
     if price_info:
+        #print 'price_info:',price_info
         price_info = json.loads(price_info[0])
-        temp['item_original_cost'] = float(price_info['def']['price'])
-        temp['real_price'] = float(price_info['def']['promotionList'][0]['price'])
-
+        if price_info.get('def'):
+            temp['item_original_cost'] = float(price_info['def']['price'])
+            temp['real_price'] = float(price_info['def']['promotionList'][0]['price'])
+        else:
+            temp['item_original_cost'] = float(price_info[price_info.keys()[0]]['price'])
+            temp['real_price'] = float(price_info[price_info.keys()[0]]['price'])
+            
     patt = '"sellCountDO":(\{.*\}),"serviceDO"'
     quantity_info = re.findall(patt,data)
     if quantity_info:
@@ -236,6 +259,25 @@ def getTaobaoItemInfo(iid):
         print '物品现价:',price_info['price']
     print '物品%s天内售出了%s件:'%(quantity_info['interval'],quantity_info['quanity'])
 
+def judge_site(url):
+    """
+    判断物品是tb还是tm
+    """
+    url_info = urlparse.urlparse(url)
+    urlkey = urlparse.parse_qs(url_info.query,True)
+    iid = int(urlkey['id'][0])
+    #print 'url_info:',url_info[1]
+    if url_info[1] == 'detail.tmall.com':
+        print 'it is a tm item'
+        print getTmallItemInfo(iid)
+    elif urlkey.get('cm_id'):
+        print 'it is a tm item'
+        print getTmallItemInfo(iid)
+    else:
+        print 'it is a tb item'
+        print getTaobaoItemInfo(iid)
+
+
 if __name__ == "__main__":
     pass
     #print '*******************************************'
@@ -243,17 +285,18 @@ if __name__ == "__main__":
     #data = get_html(url,referer="http://detail.tmall.com/item.htm?id=15765842063").decode('gbk').replace('\r\n','').replace('\t','')
     #patt = '.+?(\w+:\s*".*")'
 
-    #url = "http://s.taobao.com/search?q=%C2%B7%D3%C9%C6%F7&commend=all&search_type=item&sourceId=tb.index&spm=1.1000386.5803581.d4908513&initiative_id=tbindexz_20130710"
+    url = "http://s.taobao.com/search?q=3g网卡&commend=all&search_type=item&sourceId=tb.index"
     #searchcrawler(url)
     #print '*******************************************'
     #print res.decode('gbk')
     #print '+++++++++++++++++++++++++++++++++++++++++++++++++++++++='
     #print parse_quantity(15517664123)
     #print res['comments']
-    getTaobaoItemInfo(18592215983)
-    #print getTmallItemInfo(14370067783)
+    getTaobaoItemInfo(23290080040)
+    #print getTmallItemInfo(14992324812)
     #print parse_price(17824234211,6800)
     #print itemcrawler(17824234211)
+    #judge_site('http://item.taobao.com/item.htm?id=14992324812&ad_id=&am_id=&cm_id=140105335569ed55e27b&pm_id=')
 
 
 
