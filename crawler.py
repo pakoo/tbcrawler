@@ -177,13 +177,13 @@ def parse_price(iid,price,sellerid):
                  r'type:\s*"(.*)",\s*price' ,
                 ]
     #print 'data:',data
-    if len(data) < 50:
-        #无活动,价格就是原价
-        real_price = price/100
-        price_type = '无'
-    else:
+    if re.findall(patt_list[0],data):
         real_price = float(re.findall(patt_list[0],data)[0])
         price_type = str(re.findall(patt_list[1],data)[0]) 
+    else :
+        #无活动,价格就是原价,或者是个价格范围
+        real_price = price/100
+        price_type = '无'
     return {'price':real_price,'type':price_type}
 
 def parse_quantity(iid,sellerid,qmd5):
@@ -223,7 +223,9 @@ def getTmallItemInfo(iid):
     """
     temp = {}
     url = "http://mdskip.taobao.com/core/initItemDetail.htm?tmallBuySupport=true&itemId=%s&service3C=true"%(iid)
-    data = get_html(url,referer="http://detail.tmall.com/item.htm?id=%s"%iid).decode('gbk').replace('\r\n','').replace('\t','')
+    data = get_html(url,referer="http://detail.tmall.com/item.htm?id=%s"%iid).decode('gbk')#.replace('\r\n','').replace('\t','')
+    #print 'tm item data:',re.findall('(\{.*\})',data)
+    #jdata = json.loads(data)
     patt = '"priceInfo":(\{.*\}),"promType"'
     price_info = re.findall(patt,data)
     if price_info:
@@ -231,7 +233,10 @@ def getTmallItemInfo(iid):
         price_info = json.loads(price_info[0])
         if price_info.get('def'):
             temp['item_original_cost'] = float(price_info['def']['price'])
-            temp['real_price'] = float(price_info['def']['promotionList'][0]['price'])
+            if price_info['def']['promotionList']:
+                temp['real_price'] = float(price_info['def']['promotionList'][0]['price'])
+            else:
+                temp['real_price'] = float(price_info['def']['tagPrice'])
         else:
             temp['item_original_cost'] = float(price_info[price_info.keys()[0]]['price'])
             temp['real_price'] = float(price_info[price_info.keys()[0]]['price'])
@@ -285,15 +290,16 @@ if __name__ == "__main__":
     #data = get_html(url,referer="http://detail.tmall.com/item.htm?id=15765842063").decode('gbk').replace('\r\n','').replace('\t','')
     #patt = '.+?(\w+:\s*".*")'
 
-    url = "http://s.taobao.com/search?q=3g网卡&commend=all&search_type=item&sourceId=tb.index"
-    #searchcrawler(url)
+    url = "http://s.taobao.com/search?q=无线鼠标&commend=all&search_type=item&sourceId=tb.index"
+    searchcrawler(url)
     #print '*******************************************'
     #print res.decode('gbk')
     #print '+++++++++++++++++++++++++++++++++++++++++++++++++++++++='
     #print parse_quantity(15517664123)
     #print res['comments']
-    getTaobaoItemInfo(23290080040)
-    #print getTmallItemInfo(14992324812)
+    #getTaobaoItemInfo(23290080040)
+    #print getTmallItemInfo(16979244734)
+    #print getTmallItemInfo(12434044828)
     #print parse_price(17824234211,6800)
     #print itemcrawler(17824234211)
     #judge_site('http://item.taobao.com/item.htm?id=14992324812&ad_id=&am_id=&cm_id=140105335569ed55e27b&pm_id=')
