@@ -23,6 +23,7 @@ from urlparse import urlparse
 import sys
 import urlparse
 import re
+import types 
 mktime=lambda dt:time.mktime(dt.utctimetuple())
 ######################db.init######################
 #connection = pymongo.Connection('localhost', 27017)
@@ -39,6 +40,12 @@ mktime=lambda dt:time.mktime(dt.utctimetuple())
 
 
 
+def zp(data):
+    """
+    print dict list
+    """
+    for k in data:
+        print '%s:'%k,data[k]
 
 def get_html(url,referer ='',verbose=False):
     print '============================================'
@@ -222,10 +229,25 @@ def getTmallItemInfo(iid):
     获取tm的物品信息
     """
     temp = {}
+    patt_list = {
+                #r""""sellerNickName"\s*:\s*(.*)'\s*,'isEcardAuction'""",
+                'userid':r"'userId'\s*:\s*'(\w*)',",
+                'shopid':r'rstShopId:(\w*),',
+                'brand':r"'brand'\s*:\s*(.*)'\s*,'brandId'",
+                'brandid':r"'brandId'\s*:\s*'(\w*)'", 
+    }
+    html = get_html("http://detail.tmall.com/item.htm?id=%s"%iid)
+    #print 'html:',html
+    htmlutf = html.replace('\r\n','').replace('\t','')
+    soup = BeautifulSoup(html,fromEncoding='gbk')
+    temp['itemname'] = soup.find('input',{'name':'title'})['value']
+    temp['region'] = soup.find('input',{'name':'region'})['value']
+    temp['sellername'] = soup.find('input',{'name':'seller_nickname'})['value']
+    for k in patt_list:
+        patt = patt_list[k]
+        temp[k] = re.findall(patt,htmlutf)[0]
     url = "http://mdskip.taobao.com/core/initItemDetail.htm?tmallBuySupport=true&itemId=%s&service3C=true"%(iid)
     data = get_html(url,referer="http://detail.tmall.com/item.htm?id=%s"%iid).decode('gbk')#.replace('\r\n','').replace('\t','')
-    #print 'tm item data:',re.findall('(\{.*\})',data)
-    #jdata = json.loads(data)
     patt = '"priceInfo":(\{.*\}),"promType"'
     price_info = re.findall(patt,data)
     if price_info:
@@ -282,6 +304,16 @@ def judge_site(url):
         print 'it is a tb item'
         print getTaobaoItemInfo(iid)
 
+def getTmallShop(url):
+    """
+    获取tm商铺信息
+    """
+    html = get_html(url)
+    if html:
+        soup = BeautifulSoup(html,fromEncoding='gbk')
+        hot_item_rank = soup.find('div',{'class':'rank-panels'})
+        if hot_item_rank:
+            hot_item_rank = hot_item_rank.div.ul.findAll('li')
 
 if __name__ == "__main__":
     pass
@@ -290,19 +322,20 @@ if __name__ == "__main__":
     #data = get_html(url,referer="http://detail.tmall.com/item.htm?id=15765842063").decode('gbk').replace('\r\n','').replace('\t','')
     #patt = '.+?(\w+:\s*".*")'
 
-    url = "http://s.taobao.com/search?q=无线鼠标&commend=all&search_type=item&sourceId=tb.index"
-    searchcrawler(url)
+    url = "http://s.taobao.com/search?q=无线键盘&commend=all&search_type=item&sourceId=tb.index"
+    #searchcrawler(url)
     #print '*******************************************'
     #print res.decode('gbk')
     #print '+++++++++++++++++++++++++++++++++++++++++++++++++++++++='
     #print parse_quantity(15517664123)
     #print res['comments']
     #getTaobaoItemInfo(23290080040)
-    #print getTmallItemInfo(16979244734)
+    #zp(getTmallItemInfo(10674262264))
     #print getTmallItemInfo(12434044828)
     #print parse_price(17824234211,6800)
     #print itemcrawler(17824234211)
     #judge_site('http://item.taobao.com/item.htm?id=14992324812&ad_id=&am_id=&cm_id=140105335569ed55e27b&pm_id=')
+    print getTmallShop('logitech.tmall.com')
 
 
 
