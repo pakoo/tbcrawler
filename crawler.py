@@ -11,7 +11,7 @@ import time
 from django.utils.encoding import smart_str, smart_unicode
 import os 
 import traceback
-import datetime
+from datetime import datetime,timedelta
 import  json
 import types
 #from smallgfw import GFW
@@ -26,10 +26,10 @@ import re
 import types 
 mktime=lambda dt:time.mktime(dt.utctimetuple())
 ######################db.init######################
-#connection = pymongo.Connection('localhost', 27017)
-#
-#post=kds.post
-#
+connection = pymongo.Connection('localhost', 27017)
+
+db=connection.x
+
 #browser = requests.session()
 ######################gfw.init######################
 #gfw = GFW()
@@ -99,6 +99,38 @@ def transtime(stime):
     else:
         return int(time.time())
 
+
+def save_shop(data):
+    """
+    save shop info
+    """
+
+def save_item(data):
+    """
+    save item info
+    """
+    iteminfo = db.item.find_one({
+             'itemid':data['itemid'],
+             'site':data['site'],
+            })
+    if iteminfo :
+        newcount  = data['quantity']-item_info['quantity']        
+        db.item.update({'item_id':iteminfo['itemid'],'site':iteminfo['site']},
+                       {'$set':{'lastupdatetime':datetime.now(),'quantity':data['quantity']},
+                        '$inc':{'total_count':newcount},
+                       }
+        )
+    else:
+        db.item.insert({
+                        'itemid':data['itemid'],
+                        'itemname':data['itemname'],
+                        'pic':data['pic'],
+                        'site':data['site'],
+                        'quantity':data['quantity'],
+                        'total_count':data['quantity'],
+                        'createtime':datetime.now(),
+                        'lastupdatetime':datetime.now(),
+        })
 
 def searchcrawler(url):
     """
@@ -228,7 +260,7 @@ def getTmallItemInfo(iid):
     """
     获取tm的物品信息
     """
-    temp = {}
+    temp = {'site':'tm'}
     patt_list = {
                 #r""""sellerNickName"\s*:\s*(.*)'\s*,'isEcardAuction'""",
                 'userid':r"'userId'\s*:\s*'(\w*)',",
@@ -254,20 +286,21 @@ def getTmallItemInfo(iid):
         #print 'price_info:',price_info
         price_info = json.loads(price_info[0])
         if price_info.get('def'):
-            temp['item_original_cost'] = float(price_info['def']['price'])
+            temp['pirce'] = float(price_info['def']['price'])
             if price_info['def']['promotionList']:
-                temp['real_price'] = float(price_info['def']['promotionList'][0]['price'])
+                temp['realprice'] = float(price_info['def']['promotionList'][0]['price'])
             else:
-                temp['real_price'] = float(price_info['def']['tagPrice'])
+                temp['realprice'] = float(price_info['def']['tagPrice'])
         else:
-            temp['item_original_cost'] = float(price_info[price_info.keys()[0]]['price'])
-            temp['real_price'] = float(price_info[price_info.keys()[0]]['price'])
+            temp['pirce'] = float(price_info[price_info.keys()[0]]['price'])
+            temp['realprice'] = float(price_info[price_info.keys()[0]]['price'])
             
     patt = '"sellCountDO":(\{.*\}),"serviceDO"'
     quantity_info = re.findall(patt,data)
     if quantity_info:
-        quantity_info = json.loads(quantity_info[0])
-        temp['quantity'] = float(quantity_info['sellCount'])
+        quantity = re.findall(r'"sellCount":(\w*)',quantity_info[0])[0]
+        print 'quantity :',quantity
+        temp['quantity'] = float(quantity)
     return temp
 
 
@@ -275,16 +308,30 @@ def getTaobaoItemInfo(iid):
     """
     获取tb物品页信息
     """
+    iteminfo = {'site':'tb'}
     item_original_info = itemcrawler(iid)
     price_info = parse_price(iid,int(item_original_info['price']*100),item_original_info['userid'])
     quantity_info = parse_quantity(iid,item_original_info['userid'],item_original_info['qmd5'])
-    print '店名:',item_original_info['shop_name']
-    print '物品名称:',item_original_info['item_name']
-    print '物品原价:',item_original_info['price']
-    if price_info:
-        print '活动:',price_info['type']
-        print '物品现价:',price_info['price']
-    print '物品%s天内售出了%s件:'%(quantity_info['interval'],quantity_info['quanity'])
+    #print '店名:',item_original_info['shop_name']
+    #print '物品名称:',item_original_info['item_name']
+    #print '物品原价:',item_original_info['price']
+    #if price_info:
+    #    print '活动:',price_info['type']
+    #    print '物品现价:',price_info['price']
+    #print '物品%s天内售出了%s件:'%(quantity_info['interval'],quantity_info['quanity'])
+    #zp(item_original_info)
+    #zp(price_info)
+    #zp(quantity_info)
+    iteminfo['price'] = item_original_info['price']
+    iteminfo['itemname'] = item_original_info['item_name']
+    iteminfo['sellerid'] = item_original_info['userid']
+    iteminfo['shopid'] = item_original_info['shopId']
+    iteminfo['realprice'] = price_info['price']
+    iteminfo['active'] = price_info['type']
+    iteminfo['interval'] = quantity_info['interval']
+    iteminfo['quantity'] = quantity_info['quanity']
+    iteminfo['location'] = quantity_info['location']
+    return iteminfo
 
 def judge_site(url):
     """
@@ -312,8 +359,63 @@ def getTmallShop(url):
     if html:
         soup = BeautifulSoup(html,fromEncoding='gbk')
         hot_item_rank = soup.find('div',{'class':'rank-panels'})
+        shop_score = soup.find('div',{'class':'shop-rate'})
+
+        shop_id_name = json.loads(soup.find('div',{'id':'J_shopViewed'})['data-value'])
+        sinfo = {}
+        sinfo['shopid']=shop_id_name['shopId']
+        sinfo['shopname']=shop_id_name['name']
         if hot_item_rank:
+            sinfo['hot_item_rank'] = []
             hot_item_rank = hot_item_rank.div.ul.findAll('li')
+            for item in hot_item_rank:
+                divs = item.findAll('div')
+                pic = divs[0].a.img['src']
+                itemid = divs[0].a['href'].split('=')[-1]
+                itemname = divs[1].a.text
+                sinfo['hot_item_rank'].append({
+                'itemid':int(itemid),
+                'pic':pic,
+                'itemname':itemname,
+                })
+        if shop_score:
+            lis = shop_score.findAll('li')
+            sinfo['desc'] = float(lis[0].a.em.text)
+            sinfo['service'] = float(lis[1].a.em.text)
+            sinfo['deliver'] = float(lis[2].a.em.text)
+        return sinfo
+
+def getTaobaoShop(url):
+    """
+    获取tb店铺信息
+    """
+    html = get_html(url)
+    if html:
+        soup = BeautifulSoup(html,fromEncoding='gbk')
+        hot_item_rank = soup.find('div',{'class':'panels'}).div
+        shop_score = soup.find('div',{'class':'bd-right shop-credit'})
+        
+        sinfo = {}
+        print 'hot_item_rank:',hot_item_rank
+        if hot_item_rank:
+            sinfo['hot_item_rank'] = []            
+            hot_item_rank=hot_item_rank.ul.findAll('li')
+            for li in hot_item_rank:
+                divs = li.findAll('div')        
+                itemid = int(divs[1].a['href'].split('=')[-1])
+                pic = divs[2].a['href']
+                itemname = divs[3].p.a.text
+                sinfo['hot_item_rank'].append({'itemid':itemid,'itemname':itemname,'pic':pic})
+
+        if shop_score:
+            shop_score = shop_score.find('tbody')
+            trs = shop_score.findAll('tr')
+            sinfo['desc'] = float(trs[0].findAll('em')[0].text)
+            sinfo['service'] = float(trs[1].findAll('em')[0].text)
+            sinfo['deliver'] = float(trs[2].findAll('em')[0].text)
+    return sinfo 
+
+
 
 if __name__ == "__main__":
     pass
@@ -322,20 +424,19 @@ if __name__ == "__main__":
     #data = get_html(url,referer="http://detail.tmall.com/item.htm?id=15765842063").decode('gbk').replace('\r\n','').replace('\t','')
     #patt = '.+?(\w+:\s*".*")'
 
-    url = "http://s.taobao.com/search?q=无线键盘&commend=all&search_type=item&sourceId=tb.index"
+    url = "http://s.taobao.com/search?q=iphone&commend=all&search_type=item&sourceId=tb.index"
     #searchcrawler(url)
     #print '*******************************************'
     #print res.decode('gbk')
     #print '+++++++++++++++++++++++++++++++++++++++++++++++++++++++='
     #print parse_quantity(15517664123)
     #print res['comments']
-    #getTaobaoItemInfo(23290080040)
-    #zp(getTmallItemInfo(10674262264))
-    #print getTmallItemInfo(12434044828)
+    #zp(getTaobaoItemInfo(15846674458))
+    #zp(getTmallItemInfo(16659653478))
+    zp(getTmallItemInfo(12434044828))
     #print parse_price(17824234211,6800)
     #print itemcrawler(17824234211)
     #judge_site('http://item.taobao.com/item.htm?id=14992324812&ad_id=&am_id=&cm_id=140105335569ed55e27b&pm_id=')
-    print getTmallShop('logitech.tmall.com')
-
-
+    #print getTmallShop('logitech.tmall.com')
+    #print getTaobaoShop('shop65230372.taobao.com')
 
