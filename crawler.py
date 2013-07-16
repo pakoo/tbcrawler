@@ -100,21 +100,61 @@ def transtime(stime):
         return int(time.time())
 
 
-def save_shop(data):
+def save_shop(shopurl,site='tb'):
     """
     save shop info
     """
+    coll = db.shop
+    if site == 'tb':
+        sinfo = getTaobaoShop(shopurl)
+    elif site == 'tm':
+        sinfo = getTmallShop(shopurl)
+
+    res = coll.find_one({'shopid':sinfo['shopid'],'site':site,'url':shopurl}) 
+
+    if res:
+        pass
+        #coll.update({'sid':sinfo['shopid'],'site':site},
+        #            {'lastupdatetime':datetime.now()}
+        #)  
+    else:
+        coll.insert(
+                   {
+                   'sid':sinfo['shopid'],
+                   'name':sinfo['shopname'],
+                   'site':site,
+                   'url':shopurl,
+                   'createtime':datetime.now(),
+                   'lastupdatetime':datetime.now(),
+                   }
+        )   
+       
+def save_item_log(data):
+    """
+    save item crawler log
+    """
+    db.itemlog.insert({
+                      'itemid':data['itemid'],
+                      'price':data['price'],
+                      'realprice':data['realprice'],
+                      'quantity':data['quantity'],
+                      'createtime':datetime.now(),
+    })
+
 
 def save_item(data):
     """
     save item info
     """
+    save_shop(data['shopurl'],data['site'])    
+
     iteminfo = db.item.find_one({
              'itemid':data['itemid'],
              'site':data['site'],
             })
+
     if iteminfo :
-        newcount  = data['quantity']-item_info['quantity']        
+        newcount = data['quantity']-item_info['quantity']        
         db.item.update({'item_id':iteminfo['itemid'],'site':iteminfo['site']},
                        {'$set':{'lastupdatetime':datetime.now(),'quantity':data['quantity']},
                         '$inc':{'total_count':newcount},
@@ -124,6 +164,9 @@ def save_item(data):
         db.item.insert({
                         'itemid':data['itemid'],
                         'itemname':data['itemname'],
+                        'price':data['price'],
+                        'realprice':data['realprice'],
+                        'shopurl':data['shopurl'],
                         'pic':data['pic'],
                         'site':data['site'],
                         'quantity':data['quantity'],
@@ -183,6 +226,8 @@ def itemcrawler(iid,source='tb'):
         #请求销售数量url中需要的md5
         quantity_md5_patt = 'sbn=(\w{32})'
         qmd5 = re.findall(quantity_md5_patt,html)[0]
+        shopurl = soup.find('a',{'class':'hCard fn'})['href']
+        shop_info['shopurl'] = urlparse.urlparse(shopurl).netloc
         for a in soup.find('meta',{'name':'microscope-data'})['content'].split(';'):
             k,v = a.strip().split('=')
             if k and v:
@@ -272,6 +317,7 @@ def getTmallItemInfo(iid):
     #print 'html:',html
     htmlutf = html.replace('\r\n','').replace('\t','')
     soup = BeautifulSoup(html,fromEncoding='gbk')
+    temp['shopurl'] = urlparse.urlparse(soup.find('span',{'class':'slogo'}).a['href']).netloc
     temp['itemname'] = soup.find('input',{'name':'title'})['value']
     temp['region'] = soup.find('input',{'name':'region'})['value']
     temp['sellername'] = soup.find('input',{'name':'seller_nickname'})['value']
@@ -326,6 +372,7 @@ def getTaobaoItemInfo(iid):
     iteminfo['itemname'] = item_original_info['item_name']
     iteminfo['sellerid'] = item_original_info['userid']
     iteminfo['shopid'] = item_original_info['shopId']
+    iteminfo['shopurl'] = item_original_info['shopurl']
     iteminfo['realprice'] = price_info['price']
     iteminfo['active'] = price_info['type']
     iteminfo['interval'] = quantity_info['interval']
@@ -364,6 +411,7 @@ def getTmallShop(url):
         shop_id_name = json.loads(soup.find('div',{'id':'J_shopViewed'})['data-value'])
         sinfo = {}
         sinfo['shopid']=shop_id_name['shopId']
+        sinfo['site']='tm'
         sinfo['shopname']=shop_id_name['name']
         if hot_item_rank:
             sinfo['hot_item_rank'] = []
@@ -396,6 +444,7 @@ def getTaobaoShop(url):
         shop_score = soup.find('div',{'class':'bd-right shop-credit'})
         
         sinfo = {}
+        sinfo['site'] = 'tb'
         print 'hot_item_rank:',hot_item_rank
         if hot_item_rank:
             sinfo['hot_item_rank'] = []            
@@ -433,7 +482,7 @@ if __name__ == "__main__":
     #print res['comments']
     #zp(getTaobaoItemInfo(15846674458))
     #zp(getTmallItemInfo(16659653478))
-    zp(getTmallItemInfo(12434044828))
+    #zp(getTmallItemInfo(12434044828))
     #print parse_price(17824234211,6800)
     #print itemcrawler(17824234211)
     #judge_site('http://item.taobao.com/item.htm?id=14992324812&ad_id=&am_id=&cm_id=140105335569ed55e27b&pm_id=')
