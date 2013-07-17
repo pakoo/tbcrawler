@@ -47,9 +47,12 @@ def zp(data):
     for k in data:
         print '%s:'%k,data[k]
 
-def get_html(url,referer ='',verbose=False):
+def get_html(url,referer ='',verbose=False,protocol='http'):
+    if not url.startswith(protocol):
+        url = protocol+'://'+url
+    url = str(url)
     print '============================================'
-    print 'url:',url
+    print 'url:',[url]
     print '============================================'
     time.sleep(1)
     html=''
@@ -109,7 +112,7 @@ def save_shop(shopurl,site='tb'):
         sinfo = getTaobaoShop(shopurl)
     elif site == 'tm':
         sinfo = getTmallShop(shopurl)
-
+    print  sinfo
     res = coll.find_one({'shopid':sinfo['shopid'],'site':site,'url':shopurl}) 
 
     if res:
@@ -122,6 +125,7 @@ def save_shop(shopurl,site='tb'):
                    {
                    'sid':sinfo['shopid'],
                    'name':sinfo['shopname'],
+                   'sellerid':sinfo['sellerid'],
                    'site':site,
                    'url':shopurl,
                    'createtime':datetime.now(),
@@ -146,20 +150,28 @@ def save_item(data):
     """
     save item info
     """
-    save_shop(data['shopurl'],data['site'])    
+    print '============================'
+    print 'save a new item'
+    print 'itemid:',data['itemid']
+    print 'name:',data['itemname']
+    print 'site:',data['site']
 
     iteminfo = db.item.find_one({
              'itemid':data['itemid'],
              'site':data['site'],
             })
-
     if iteminfo :
+        interval = datetime.now()-iteminfo['lastupdatetime']
+        if interval.total_seconds()<86400:
+            print 'result:this is  a exisit item,so continiue!'
+            return
         newcount = data['quantity']-item_info['quantity']        
         db.item.update({'item_id':iteminfo['itemid'],'site':iteminfo['site']},
                        {'$set':{'lastupdatetime':datetime.now(),'quantity':data['quantity']},
                         '$inc':{'total_count':newcount},
                        }
         )
+        print 'result:update this item info success!'
     else:
         db.item.insert({
                         'itemid':data['itemid'],
@@ -167,13 +179,17 @@ def save_item(data):
                         'price':data['price'],
                         'realprice':data['realprice'],
                         'shopurl':data['shopurl'],
-                        'pic':data['pic'],
+                        #'pic':data['pic'],
                         'site':data['site'],
                         'quantity':data['quantity'],
                         'total_count':data['quantity'],
                         'createtime':datetime.now(),
                         'lastupdatetime':datetime.now(),
         })
+        print 'result:insert success'
+    save_shop(data['shopurl'],data['site'])    
+    save_item_log(data)
+    print '============================'
 
 def searchcrawler(url):
     """
@@ -305,10 +321,10 @@ def getTmallItemInfo(iid):
     """
     获取tm的物品信息
     """
-    temp = {'site':'tm'}
+    temp = {'site':'tm','itemid':iid}
     patt_list = {
                 #r""""sellerNickName"\s*:\s*(.*)'\s*,'isEcardAuction'""",
-                'userid':r"'userId'\s*:\s*'(\w*)',",
+                'sellerid':r"'userId'\s*:\s*'(\w*)',",
                 'shopid':r'rstShopId:(\w*),',
                 'brand':r"'brand'\s*:\s*(.*)'\s*,'brandId'",
                 'brandid':r"'brandId'\s*:\s*'(\w*)'", 
@@ -329,16 +345,20 @@ def getTmallItemInfo(iid):
     patt = '"priceInfo":(\{.*\}),"promType"'
     price_info = re.findall(patt,data)
     if price_info:
-        #print 'price_info:',price_info
         price_info = json.loads(price_info[0])
+        print 'price_info:',price_info
         if price_info.get('def'):
-            temp['pirce'] = float(price_info['def']['price'])
+            temp['price'] = float(price_info['def']['price'])
             if price_info['def']['promotionList']:
                 temp['realprice'] = float(price_info['def']['promotionList'][0]['price'])
             else:
-                temp['realprice'] = float(price_info['def']['tagPrice'])
+                if price_info['def'].get('tagPrice'):
+                    temp['realprice'] = float(price_info['def']['tagPrice'])
+                else:
+                    temp['realprice'] = float(price_info['def']['price'])
+                    
         else:
-            temp['pirce'] = float(price_info[price_info.keys()[0]]['price'])
+            temp['price'] = float(price_info[price_info.keys()[0]]['price'])
             temp['realprice'] = float(price_info[price_info.keys()[0]]['price'])
             
     patt = '"sellCountDO":(\{.*\}),"serviceDO"'
@@ -368,6 +388,7 @@ def getTaobaoItemInfo(iid):
     #zp(item_original_info)
     #zp(price_info)
     #zp(quantity_info)
+    iteminfo['itemid'] = iid
     iteminfo['price'] = item_original_info['price']
     iteminfo['itemname'] = item_original_info['item_name']
     iteminfo['sellerid'] = item_original_info['userid']
@@ -388,15 +409,20 @@ def judge_site(url):
     urlkey = urlparse.parse_qs(url_info.query,True)
     iid = int(urlkey['id'][0])
     #print 'url_info:',url_info[1]
-    if url_info[1] == 'detail.tmall.com':
-        print 'it is a tm item'
-        print getTmallItemInfo(iid)
-    elif urlkey.get('cm_id'):
-        print 'it is a tm item'
-        print getTmallItemInfo(iid)
-    else:
-        print 'it is a tb item'
-        print getTaobaoItemInfo(iid)
+    try:
+        if url_info[1] == 'detail.tmall.com':
+            print 'it is a tm item'
+            data = getTmallItemInfo(iid)
+        elif urlkey.get('cm_id'):
+            print 'it is a tm item'
+            data = getTmallItemInfo(iid)
+        else:
+            print 'it is a tb item'
+            data = getTaobaoItemInfo(iid)
+    except Exception ,e:
+        print traceback.print_exc()
+        return
+    save_item(data)
 
 def getTmallShop(url):
     """
@@ -408,11 +434,19 @@ def getTmallShop(url):
         hot_item_rank = soup.find('div',{'class':'rank-panels'})
         shop_score = soup.find('div',{'class':'shop-rate'})
 
-        shop_id_name = json.loads(soup.find('div',{'id':'J_shopViewed'})['data-value'])
+        shop_name = soup.find('span',{'class':'slogo'}).a.text
         sinfo = {}
-        sinfo['shopid']=shop_id_name['shopId']
+        for a in soup.find('meta',{'name':'microscope-data'})['content'].split(';'):
+            if a:
+                k,v = a.strip().split('=')
+                if k and v:
+                    if v:
+                        k = k.strip()
+                        sinfo[k] = int(v)
         sinfo['site']='tm'
-        sinfo['shopname']=shop_id_name['name']
+        sinfo['shopname']=shop_name
+        sinfo['sellerid']=sinfo.get('userid') or sinfo.get('userId')
+        sinfo['shopid']=sinfo['shopId']
         if hot_item_rank:
             sinfo['hot_item_rank'] = []
             hot_item_rank = hot_item_rank.div.ul.findAll('li')
@@ -442,10 +476,18 @@ def getTaobaoShop(url):
         soup = BeautifulSoup(html,fromEncoding='gbk')
         hot_item_rank = soup.find('div',{'class':'panels'}).div
         shop_score = soup.find('div',{'class':'bd-right shop-credit'})
+        shop_name = soup.find('a',{'class':'shop-name '}).text
         
         sinfo = {}
         sinfo['site'] = 'tb'
-        print 'hot_item_rank:',hot_item_rank
+        #print 'hot_item_rank:',hot_item_rank
+        for a in soup.find('meta',{'name':'microscope-data'})['content'].split(';'):
+            k,v = a.strip().split('=')
+            if k and v:
+                sinfo[k] = int(v)
+        sinfo['shopid'] = sinfo['shopId']
+        sinfo['sellerid'] = sinfo['userId']
+        sinfo['shopname'] = shop_name
         if hot_item_rank:
             sinfo['hot_item_rank'] = []            
             hot_item_rank=hot_item_rank.ul.findAll('li')
@@ -462,7 +504,7 @@ def getTaobaoShop(url):
             sinfo['desc'] = float(trs[0].findAll('em')[0].text)
             sinfo['service'] = float(trs[1].findAll('em')[0].text)
             sinfo['deliver'] = float(trs[2].findAll('em')[0].text)
-    return sinfo 
+        return sinfo 
 
 
 
@@ -473,19 +515,24 @@ if __name__ == "__main__":
     #data = get_html(url,referer="http://detail.tmall.com/item.htm?id=15765842063").decode('gbk').replace('\r\n','').replace('\t','')
     #patt = '.+?(\w+:\s*".*")'
 
-    url = "http://s.taobao.com/search?q=iphone&commend=all&search_type=item&sourceId=tb.index"
-    #searchcrawler(url)
+    url = "http://s.taobao.com/search?q=无线鼠标&commend=all&search_type=item&sourceId=tb.index"
+    searchcrawler(url)
     #print '*******************************************'
     #print res.decode('gbk')
     #print '+++++++++++++++++++++++++++++++++++++++++++++++++++++++='
     #print parse_quantity(15517664123)
     #print res['comments']
+    #data = getTaobaoItemInfo(15846674458)
+    #data = getTmallItemInfo(16659653478)#已经下架
+    #data = getTmallItemInfo(8874699687)
+    #print data
+    #save_item(data)
     #zp(getTaobaoItemInfo(15846674458))
     #zp(getTmallItemInfo(16659653478))
     #zp(getTmallItemInfo(12434044828))
     #print parse_price(17824234211,6800)
     #print itemcrawler(17824234211)
     #judge_site('http://item.taobao.com/item.htm?id=14992324812&ad_id=&am_id=&cm_id=140105335569ed55e27b&pm_id=')
-    #print getTmallShop('logitech.tmall.com')
+    #print getTmallShop('mmtsm.tmall.com')
     #print getTaobaoShop('shop65230372.taobao.com')
 
