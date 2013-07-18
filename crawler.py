@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
 some db interface 
@@ -181,6 +181,7 @@ def save_item(data):
                         'shopurl':data['shopurl'],
                         #'pic':data['pic'],
                         'site':data['site'],
+                        'keyword':data['keyword'],
                         'quantity':data['quantity'],
                         'total_count':data['quantity'],
                         'createtime':datetime.now(),
@@ -317,11 +318,11 @@ def parse_quantity(iid,sellerid,qmd5):
                     resdict[key]= value
     return resdict
 
-def getTmallItemInfo(iid):
+def getTmallItemInfo(iid,keyword=''):
     """
     获取tm的物品信息
     """
-    temp = {'site':'tm','itemid':iid}
+    temp = {'site':'tm','itemid':iid,'keyword':keyword}
     patt_list = {
                 #r""""sellerNickName"\s*:\s*(.*)'\s*,'isEcardAuction'""",
                 'sellerid':r"'userId'\s*:\s*'(\w*)',",
@@ -370,11 +371,11 @@ def getTmallItemInfo(iid):
     return temp
 
 
-def getTaobaoItemInfo(iid):
+def getTaobaoItemInfo(iid,keyword=''):
     """
     获取tb物品页信息
     """
-    iteminfo = {'site':'tb'}
+    iteminfo = {'site':'tb','keyword':keyword}
     item_original_info = itemcrawler(iid)
     price_info = parse_price(iid,int(item_original_info['price']*100),item_original_info['userid'])
     quantity_info = parse_quantity(iid,item_original_info['userid'],item_original_info['qmd5'])
@@ -506,7 +507,17 @@ def getTaobaoShop(url):
             sinfo['deliver'] = float(trs[2].findAll('em')[0].text)
         return sinfo 
 
-
+def runcrawler():
+    keyword = [
+    '无线鼠标',
+    '无线键盘',
+    'iphone',
+    '3g网卡',
+    '路由器',
+    ]
+    url = "http://s.taobao.com/search?q=%s&commend=all&search_type=item&sourceId=tb.index"
+    for k in keyword:
+        searchcrawler(url%k)
 
 if __name__ == "__main__":
     pass
@@ -515,8 +526,8 @@ if __name__ == "__main__":
     #data = get_html(url,referer="http://detail.tmall.com/item.htm?id=15765842063").decode('gbk').replace('\r\n','').replace('\t','')
     #patt = '.+?(\w+:\s*".*")'
 
-    url = "http://s.taobao.com/search?q=无线鼠标&commend=all&search_type=item&sourceId=tb.index"
-    searchcrawler(url)
+    url = "http://s.taobao.com/search?q=无线键盘&commend=all&search_type=item&sourceId=tb.index"
+    #searchcrawler(url)
     #print '*******************************************'
     #print res.decode('gbk')
     #print '+++++++++++++++++++++++++++++++++++++++++++++++++++++++='
@@ -535,4 +546,5 @@ if __name__ == "__main__":
     #judge_site('http://item.taobao.com/item.htm?id=14992324812&ad_id=&am_id=&cm_id=140105335569ed55e27b&pm_id=')
     #print getTmallShop('mmtsm.tmall.com')
     #print getTaobaoShop('shop65230372.taobao.com')
+    runcrawler()
 
