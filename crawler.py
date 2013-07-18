@@ -192,7 +192,7 @@ def save_item(data):
     save_item_log(data)
     print '============================'
 
-def searchcrawler(url):
+def searchcrawler(url,keyword=''):
     """
     tb搜索页爬虫
     """
@@ -211,7 +211,7 @@ def searchcrawler(url):
                 item_id = urlparse.parse_qs(url_info.query,True)['id'][0]
                 print item_url
                 print item_id
-                judge_site(item_url)
+                judge_site(item_url,keyword)
         items_col = soup.findAll('div',{'class':'col item icon-datalink'})
         if items_col:
             print '=======================row search col=========================='
@@ -223,7 +223,7 @@ def searchcrawler(url):
                 item_id = urlparse.parse_qs(url_info.query,True)['id'][0]
                 print item_url
                 print item_id
-                judge_site(item_url)
+                judge_site(item_url,keyword)
 
 
 def itemcrawler(iid,source='tb'):
@@ -402,7 +402,7 @@ def getTaobaoItemInfo(iid,keyword=''):
     iteminfo['location'] = quantity_info['location']
     return iteminfo
 
-def judge_site(url):
+def judge_site(url,keyword=''):
     """
     判断物品是tb还是tm
     """
@@ -413,13 +413,13 @@ def judge_site(url):
     try:
         if url_info[1] == 'detail.tmall.com':
             print 'it is a tm item'
-            data = getTmallItemInfo(iid)
+            data = getTmallItemInfo(iid,keyword)
         elif urlkey.get('cm_id'):
             print 'it is a tm item'
-            data = getTmallItemInfo(iid)
+            data = getTmallItemInfo(iid,keyword)
         else:
             print 'it is a tb item'
-            data = getTaobaoItemInfo(iid)
+            data = getTaobaoItemInfo(iid,keyword)
     except Exception ,e:
         print traceback.print_exc()
         return
@@ -527,6 +527,11 @@ def runcrawler():
     url = "http://s.taobao.com/search?q=%s&commend=all&search_type=item&sourceId=tb.index"
     for k in keyword:
         searchcrawler(url%k,keyword=k)
+
+def cleandata():
+    db.item.drop() 
+    db.itemlog.drop() 
+    db.shop.drop() 
 
 if __name__ == "__main__":
     pass
