@@ -511,22 +511,9 @@ def getTaobaoShop(url):
         return sinfo 
 
 def runcrawler():
-    keyword = [
-    '无线鼠标',
-    '无线键盘',
-    '3g网卡',
-    '路由器',
-    'iphone5',
-    '显示器',
-    'ipad',
-    'iphone4s',
-    'macbook air',
-    'galaxy',
-    '移动路由',
-    ]
     url = "http://s.taobao.com/search?q=%s&commend=all&search_type=item&sourceId=tb.index"
-    for k in keyword:
-        searchcrawler(url%k,keyword=k)
+    for k in db.keyword.find():
+        searchcrawler(url%k['name'],keyword=k['name'])
 
 def cleandata():
     db.item.drop() 
