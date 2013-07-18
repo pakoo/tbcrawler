@@ -475,10 +475,12 @@ def getTaobaoShop(url):
     html = get_html(url)
     if html:
         soup = BeautifulSoup(html,fromEncoding='gbk')
-        hot_item_rank = soup.find('div',{'class':'panels'}).div
+        hot_item_rank = soup.find('div',{'class':'panels'})
         shop_score = soup.find('div',{'class':'bd-right shop-credit'})
-        shop_name = soup.find('a',{'class':'shop-name '}).text
-        
+        if soup.find('a',{'class':'shop-name '}):
+            shop_name = soup.find('a',{'class':'shop-name '}).text
+        else:
+            shop_name = soup.find('a',{'class':'hCard fn'}).text
         sinfo = {}
         sinfo['site'] = 'tb'
         #print 'hot_item_rank:',hot_item_rank
@@ -490,6 +492,7 @@ def getTaobaoShop(url):
         sinfo['sellerid'] = sinfo['userId']
         sinfo['shopname'] = shop_name
         if hot_item_rank:
+            hot_item_rank = hot_item_rank.div
             sinfo['hot_item_rank'] = []            
             hot_item_rank=hot_item_rank.ul.findAll('li')
             for li in hot_item_rank:
@@ -545,6 +548,6 @@ if __name__ == "__main__":
     #print itemcrawler(17824234211)
     #judge_site('http://item.taobao.com/item.htm?id=14992324812&ad_id=&am_id=&cm_id=140105335569ed55e27b&pm_id=')
     #print getTmallShop('mmtsm.tmall.com')
-    #print getTaobaoShop('shop65230372.taobao.com')
+    #print getTaobaoShop('http://hjjh.taobao.com')
     runcrawler()
 
