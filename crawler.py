@@ -548,6 +548,6 @@ if __name__ == "__main__":
     #print itemcrawler(17824234211)
     #judge_site('http://item.taobao.com/item.htm?id=14992324812&ad_id=&am_id=&cm_id=140105335569ed55e27b&pm_id=')
     #print getTmallShop('mmtsm.tmall.com')
-    #print getTaobaoShop('http://hjjh.taobao.com')
-    runcrawler()
+    print getTaobaoShop('http://yiyunya.taobao.com')
+    #runcrawler()
 
