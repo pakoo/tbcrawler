@@ -13,7 +13,6 @@ import os
 import traceback
 from datetime import datetime,timedelta
 import  json
-import types
 #from smallgfw import GFW
 import os 
 import os.path
@@ -24,6 +23,7 @@ import sys
 import urlparse
 import re
 import types 
+import sys
 mktime=lambda dt:time.mktime(dt.utctimetuple())
 ######################db.init######################
 connection = pymongo.Connection('localhost', 27017)
@@ -161,12 +161,8 @@ def save_item(data):
              'site':data['site'],
             })
     if iteminfo :
-        interval = datetime.now()-iteminfo['lastupdatetime']
-        if interval.total_seconds()<86400:
-            print 'result:this is  a exisit item,so continiue!'
-            return
-        newcount = data['quantity']-item_info['quantity']        
-        db.item.update({'item_id':iteminfo['itemid'],'site':iteminfo['site']},
+        newcount = data['quantity']-iteminfo['quantity']        
+        db.item.update({'itemid':iteminfo['itemid'],'site':iteminfo['site']},
                        {'$set':{'lastupdatetime':datetime.now(),'quantity':data['quantity']},
                         '$inc':{'total_count':newcount},
                        }
@@ -225,6 +221,14 @@ def searchcrawler(url,keyword=''):
                 print item_id
                 judge_site(item_url,keyword)
 
+def check_item_update_time(iid,site,interval=86400):
+    res = db.item.find_one({'itemid':iid,'site':site})
+    if res: 
+        delta = datetime.now()-res['lastupdatetime']
+        if delta.total_seconds()<interval:
+            return True
+    return False
+
 
 def itemcrawler(iid,source='tb'):
     """
@@ -246,9 +250,10 @@ def itemcrawler(iid,source='tb'):
         shopurl = soup.find('a',{'class':'hCard fn'})['href']
         shop_info['shopurl'] = urlparse.urlparse(shopurl).netloc
         for a in soup.find('meta',{'name':'microscope-data'})['content'].split(';'):
-            k,v = a.strip().split('=')
-            if k and v:
-                shop_info[k] = int(v)
+            if a:
+                k,v = a.strip().split('=')
+                if k and v:
+                    shop_info[k] = int(v)
         price = soup.find('li',{'id':'J_StrPriceModBox'}).find('em',{'class':'tb-rmb-num'}).text
         #商品名称
         item_name = json.loads(soup.find('div',{'id':'J_itemViewed'})['data-value'])['title']
@@ -347,7 +352,7 @@ def getTmallItemInfo(iid,keyword=''):
     price_info = re.findall(patt,data)
     if price_info:
         price_info = json.loads(price_info[0])
-        print 'price_info:',price_info
+        #print 'price_info:',price_info
         if price_info.get('def'):
             temp['price'] = float(price_info['def']['price'])
             if price_info['def']['promotionList']:
@@ -413,12 +418,18 @@ def judge_site(url,keyword=''):
     try:
         if url_info[1] == 'detail.tmall.com':
             print 'it is a tm item'
+            if check_item_update_time(iid,'tm'):
+                return
             data = getTmallItemInfo(iid,keyword)
         elif urlkey.get('cm_id'):
             print 'it is a tm item'
+            if check_item_update_time(iid,'tm'):
+                return
             data = getTmallItemInfo(iid,keyword)
         else:
             print 'it is a tb item'
+            if check_item_update_time(iid,'tb'):
+                return
             data = getTaobaoItemInfo(iid,keyword)
     except Exception ,e:
         print traceback.print_exc()
@@ -454,7 +465,7 @@ def getTmallShop(url):
             for item in hot_item_rank:
                 divs = item.findAll('div')
                 pic = divs[0].a.img['src']
-                itemid = divs[0].a['href'].split('=')[-1]
+                itemid = divs[0].a['href'].split('=')[-1] 
                 itemname = divs[1].a.text
                 sinfo['hot_item_rank'].append({
                 'itemid':int(itemid),
@@ -514,6 +525,21 @@ def runcrawler():
     url = "http://s.taobao.com/search?q=%s&commend=all&search_type=item&sourceId=tb.index"
     for k in db.keyword.find():
         searchcrawler(url%k['name'],keyword=k['name'])
+        db.keyword.update({'_id':k['_id']},{'$set':{'lastupdatetime':datetime.now()}})
+
+def update_item_date(interval=86000):
+    for item in db.item.find():
+        try:
+            if check_item_update_time(item['itemid'],item['site'],interval):
+                continue
+            if item['site'] == 'tm':
+                data = getTmallItemInfo(item['itemid'],'tm')
+            elif item['site'] == 'tb':
+                data = getTaobaoItemInfo(item['itemid'],'tb')
+        except Exception ,e:
+            print traceback.print_exc()
+            return
+        save_item(data)
 
 def cleandata():
     db.item.drop() 
@@ -522,6 +548,11 @@ def cleandata():
 
 if __name__ == "__main__":
     pass
+    if sys.argv[1] == 'search':
+        runcrawler()
+    elif sys.argv[1] == 'update':
+        update_item_date()
+        
     #print '*******************************************'
     #url = "http://mdskip.taobao.com/core/initItemDetail.htm?tmallBuySupport=true&itemId=15765842063&service3C=true"
     #data = get_html(url,referer="http://detail.tmall.com/item.htm?id=15765842063").decode('gbk').replace('\r\n','').replace('\t','')
@@ -536,10 +567,10 @@ if __name__ == "__main__":
     #print res['comments']
     #data = getTaobaoItemInfo(15846674458)
     #data = getTmallItemInfo(16659653478)#已经下架
-    #data = getTmallItemInfo(8874699687)
+    #data = getTmallItemInfo(15432145307)
     #print data
     #save_item(data)
-    #zp(getTaobaoItemInfo(15846674458))
+    #zp(getTaobaoItemInfo(17699431781))
     #zp(getTmallItemInfo(16659653478))
     #zp(getTmallItemInfo(12434044828))
     #print parse_price(17824234211,6800)
@@ -547,5 +578,5 @@ if __name__ == "__main__":
     #judge_site('http://item.taobao.com/item.htm?id=14992324812&ad_id=&am_id=&cm_id=140105335569ed55e27b&pm_id=')
     #print getTmallShop('mmtsm.tmall.com')
     #print getTaobaoShop('http://yiyunya.taobao.com')
-    runcrawler()
+    #runcrawler()
 
