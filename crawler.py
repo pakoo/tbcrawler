@@ -334,6 +334,7 @@ def getTmallItemInfo(iid,keyword=''):
                 'shopid':r'rstShopId:(\w*),',
                 'brand':r"'brand'\s*:\s*(.*)'\s*,'brandId'",
                 'brandid':r"'brandId'\s*:\s*'(\w*)'", 
+                'total_count':r'totalSQ=(\w*)', 
     }
     html = get_html("http://detail.tmall.com/item.htm?id=%s"%iid)
     #print 'html:',html
@@ -571,7 +572,7 @@ if __name__ == "__main__":
     #print data
     #save_item(data)
     #zp(getTaobaoItemInfo(17699431781))
-    #zp(getTmallItemInfo(16659653478))
+    zp(getTmallItemInfo(16659653478))
     #zp(getTmallItemInfo(12434044828))
     #print parse_price(17824234211,6800)
     #print itemcrawler(17824234211)
