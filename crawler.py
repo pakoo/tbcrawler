@@ -547,11 +547,11 @@ def cleandata():
     db.shop.drop() 
 
 if __name__ == "__main__":
-    pass
-    if sys.argv[1] == 'search':
-        runcrawler()
-    elif sys.argv[1] == 'update':
-        update_item_date()
+    if len(sys.argv) >1:
+        if sys.argv[1] == 'search':
+            runcrawler()
+        elif sys.argv[1] == 'update':
+            update_item_date()
         
     #print '*******************************************'
     #url = "http://mdskip.taobao.com/core/initItemDetail.htm?tmallBuySupport=true&itemId=15765842063&service3C=true"
