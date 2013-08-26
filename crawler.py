@@ -16,8 +16,8 @@ import  json
 #from smallgfw import GFW
 import os 
 import os.path
-from pymongo import ASCENDING,DESCENDING
-import requests
+from pymongo import ASCENDING,DESCENDING 
+import requests 
 from urlparse import urlparse
 import sys
 import urlparse
@@ -65,7 +65,7 @@ def get_html(url,referer ='',verbose=False,protocol='http'):
         crl.setopt(pycurl.CONNECTTIMEOUT, 8)
         crl.setopt(pycurl.TIMEOUT, 30)
         crl.setopt(pycurl.VERBOSE, verbose)
-        crl.setopt(pycurl.MAXREDIRS,10)
+        crl.setopt(pycurl.MAXREDIRS,15)
         crl.setopt(pycurl.USERAGENT,'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:9.0.1) Gecko/20100101 Firefox/9.0.1')
         #crl.setopt(pycurl.HTTPHEADER,headers)
         if referer:
@@ -139,9 +139,12 @@ def save_item_log(data):
     """
     db.itemlog.insert({
                       'itemid':data['itemid'],
+                      'name':data['itemname'],
                       'price':data['price'],
+                      'site':data['site'],
                       'realprice':data['realprice'],
                       'quantity':data['quantity'],
+                      'total_count':data.get('total_count',0),
                       'createtime':datetime.now(),
     })
 
@@ -179,7 +182,7 @@ def save_item(data):
                         'site':data['site'],
                         'keyword':data['keyword'],
                         'quantity':data['quantity'],
-                        'total_count':data['quantity'],
+                        'total_count':data.get('total_count',data['quantity']),
                         'createtime':datetime.now(),
                         'lastupdatetime':datetime.now(),
         })
@@ -497,11 +500,13 @@ def getTaobaoShop(url):
         sinfo['site'] = 'tb'
         #print 'hot_item_rank:',hot_item_rank
         for a in soup.find('meta',{'name':'microscope-data'})['content'].split(';'):
-            k,v = a.strip().split('=')
-            if k and v:
-                sinfo[k] = int(v)
+            if a:
+                k,v = a.strip().split('=')
+                if k and v:
+                    sinfo[k] = int(v)
+        #print 'sinfo:',sinfo
         sinfo['shopid'] = sinfo['shopId']
-        sinfo['sellerid'] = sinfo['userId']
+        sinfo['sellerid'] = sinfo.get('userId',sinfo.get('userid',0))
         sinfo['shopname'] = shop_name
         if hot_item_rank:
             hot_item_rank = hot_item_rank.div
@@ -525,8 +530,12 @@ def getTaobaoShop(url):
 def runcrawler():
     url = "http://s.taobao.com/search?q=%s&commend=all&search_type=item&sourceId=tb.index"
     for k in db.keyword.find():
-        searchcrawler(url%k['name'],keyword=k['name'])
-        db.keyword.update({'_id':k['_id']},{'$set':{'lastupdatetime':datetime.now()}})
+        try:
+            searchcrawler(url%k['name'],keyword=k['name'])
+            db.keyword.update({'_id':k['_id']},{'$set':{'lastupdatetime':datetime.now()}})
+        except:
+            print locals()
+            print traceback.print_exc()
 
 def update_item_date(interval=86000):
     for item in db.item.find():
@@ -538,6 +547,7 @@ def update_item_date(interval=86000):
             elif item['site'] == 'tb':
                 data = getTaobaoItemInfo(item['itemid'],'tb')
         except Exception ,e:
+            print locals()
             print traceback.print_exc()
             return
         save_item(data)
@@ -559,7 +569,7 @@ if __name__ == "__main__":
     #data = get_html(url,referer="http://detail.tmall.com/item.htm?id=15765842063").decode('gbk').replace('\r\n','').replace('\t','')
     #patt = '.+?(\w+:\s*".*")'
 
-    url = "http://s.taobao.com/search?q=无线键盘&commend=all&search_type=item&sourceId=tb.index"
+    #url = "http://s.taobao.com/search?q=无线键盘&commend=all&search_type=item&sourceId=tb.index"
     #searchcrawler(url)
     #print '*******************************************'
     #print res.decode('gbk')
@@ -572,12 +582,17 @@ if __name__ == "__main__":
     #print data
     #save_item(data)
     #zp(getTaobaoItemInfo(17699431781))
-    zp(getTmallItemInfo(16659653478))
+    #zp(getTmallItemInfo(16659653478))
     #zp(getTmallItemInfo(12434044828))
     #print parse_price(17824234211,6800)
     #print itemcrawler(17824234211)
     #judge_site('http://item.taobao.com/item.htm?id=14992324812&ad_id=&am_id=&cm_id=140105335569ed55e27b&pm_id=')
-    #print getTmallShop('mmtsm.tmall.com')
-    #print getTaobaoShop('http://yiyunya.taobao.com')
+    #print getTmallShop('logitech.tmall.com')
+    #print getTaobaoShop('http://hjjh.taobao.com')
     #runcrawler()
+    #url = "http://ext.mdskip.taobao.com/extension/dealRecords.htm?bid_page=1&page_size=15&is_start=false&item_type=b&ends=1377944879000&starts=1377340079000&item_id=22167436659&user_tag=34672672&old_quantity=905551&seller_num_id=1124016457&isFromDetail=yes&totalSQ=144923&sbn=37ad2e5f076636c83ee5af7500954ee1,showBuyerList"
+    #data = get_html(url,referer="http://detail.tmall.com/item.htm?id=22167436659",verbose=True)#.decode('gbk').replace('\r\n','').replace('\t','')
+    #print 'data:',data
+    #print get_html('http://taipusm.tmall.com')
+
 
