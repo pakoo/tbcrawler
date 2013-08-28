@@ -546,11 +546,11 @@ def update_item_date(interval=86000):
                 data = getTmallItemInfo(item['itemid'],'tm')
             elif item['site'] == 'tb':
                 data = getTaobaoItemInfo(item['itemid'],'tb')
+            save_item(data)
         except Exception ,e:
             print locals()
             print traceback.print_exc()
             return
-        save_item(data)
 
 def cleandata():
     db.item.drop() 
