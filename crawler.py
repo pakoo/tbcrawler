@@ -107,6 +107,7 @@ def save_shop(shopurl,site='tb'):
     """
     save shop info
     """
+    return
     coll = db.shop
     if site == 'tb':
         sinfo = getTaobaoShop(shopurl)
@@ -166,12 +167,15 @@ def save_item(data):
     if iteminfo :
         newcount = data['quantity']-iteminfo['quantity']        
         db.item.update({'itemid':iteminfo['itemid'],'site':iteminfo['site']},
-                       {'$set':{'lastupdatetime':datetime.now(),'quantity':data['quantity']},
-                        '$inc':{'total_count':newcount},
+                       {'$set':{'lastupdatetime':datetime.now(),
+                                'quantity':data['quantity'],
+                                'total_count':data.get('total_count',0),
+                                },
                        }
         )
-        print 'result:update this item info success!'
+        print '[save data]:result:update this item info success!'
     else:
+        print '[save data]:insert a new item'
         db.item.insert({
                         'itemid':data['itemid'],
                         'itemname':data['itemname'],
@@ -550,7 +554,7 @@ def update_item_date(interval=86000):
         except Exception ,e:
             print locals()
             print traceback.print_exc()
-            return
+            continue
 
 def cleandata():
     db.item.drop() 
@@ -578,7 +582,7 @@ if __name__ == "__main__":
     #print res['comments']
     #data = getTaobaoItemInfo(15846674458)
     #data = getTmallItemInfo(16659653478)#已经下架
-    #data = getTmallItemInfo(15432145307)
+    #data = getTmallItemInfo(18740852051)
     #print data
     #save_item(data)
     #zp(getTaobaoItemInfo(17699431781))
